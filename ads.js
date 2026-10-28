@@ -1,14 +1,14 @@
 /**
- * server/ads.js — Rewarded ads (AVOD), DEMO implementation.
+ * ads.js — Rewarded ads (AVOD), DEMO implementation.
  *
  * ============================================================================
  * GOING LIVE WITH REAL ADS — this file is the ONE place to change.
  * Set AD_PROVIDER to your network (e.g. 'admob') and AD_CREATIVE_URL /
  * the network's rewarded-ad unit, then replace the simulated session flow
  * below with the network SDK's server-side verification callback
- * (AdMob SSV, Unity Ads S2S, etc.). Routes in server/index.js call
+ * (AdMob SSV, Unity Ads S2S, etc.). Routes in index.js call
  * startSession()/completeSession() and never touch ad internals, and the
- * player overlay in public/app.js (watchAd) just counts down whatever
+ * player overlay in app.js (watchAd) just counts down whatever
  * `duration_sec` the session returns — point it at the real creative.
  * Until then the "ad" is an in-app simulated 15s spot, honestly labeled
  * "DEMO AD" everywhere it appears. No real advertiser is involved.

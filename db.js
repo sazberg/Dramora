@@ -1,5 +1,6 @@
 /**
- * server/db.js — Dramora database (better-sqlite3).
+ * db.js — Dramora database (better-sqlite3). FLAT EDITION: this file sits at
+ * the repo root, next to the seed posters/videos it loads on first boot.
  * Coins: users.balance (cache) + ledger (source of truth). applyLedger() is
  * the ONLY way coins move — one transaction, so they always reconcile.
  */
@@ -9,7 +10,7 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 const Database = require('better-sqlite3');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
+const DATA_DIR = path.join(__dirname, 'data');
 for (const sub of ['', 'uploads/videos', 'uploads/posters', 'uploads/thumbs', 'uploads/logos', 'seed-posters']) {
   fs.mkdirSync(path.join(DATA_DIR, sub), { recursive: true });
 }
@@ -189,8 +190,9 @@ function seed() {
         // Seed assets live in DATA_DIR locally, but on hosted deploys DATA_DIR is a
         // mounted persistent disk that shadows the repo — fall back to the bundled
         // seed-assets/ folder at the app root so posters survive first boot there.
-        let src = path.join(DATA_DIR, 'seed-posters', s.poster);
-        if (!fs.existsSync(src)) src = path.join(__dirname, '..', 'seed-assets', s.poster);
+        let src = path.join(__dirname, s.poster); // FLAT: seed posters live at repo root
+        if (!fs.existsSync(src)) src = path.join(DATA_DIR, 'seed-posters', s.poster);
+        if (!fs.existsSync(src)) src = path.join(__dirname, 'seed-assets', s.poster);
         if (fs.existsSync(src)) { posterFile = `seed-${s.slug}.jpg`; fs.copyFileSync(src, path.join(DATA_DIR, 'uploads/posters', posterFile)); }
       }
       const info = insS.run(s.slug, s.title, s.genre, s.synopsis, s.tags, s.free, s.price, posterFile, s.is18 ? 1 : 0);
@@ -203,7 +205,8 @@ function seed() {
           // Same disk-shadow fallback as posters: copy the bundled seed video into
           // the data dir on first boot when the deploy's disk starts empty.
           if (!fs.existsSync(vp)) {
-            const bundled = path.join(__dirname, '..', 'seed-assets', s.playableFile);
+            const bundled = path.join(__dirname, s.playableFile); // FLAT: seed video at repo root
+            if (!fs.existsSync(bundled)) { const alt = path.join(__dirname, 'seed-assets', s.playableFile); if (fs.existsSync(alt)) fs.copyFileSync(alt, vp); }
             if (fs.existsSync(bundled)) fs.copyFileSync(bundled, vp);
           }
           if (fs.existsSync(vp)) { video = s.playableFile; const p = probe(vp); dur = p.duration; size = p.size; }
@@ -211,8 +214,9 @@ function seed() {
           const rendName = s.playableFile.replace(/\.mp4$/i, '-480p.mp4');
           const rp = path.join(DATA_DIR, 'uploads/videos', rendName);
           if (!fs.existsSync(rp)) {
-            const bundledR = path.join(__dirname, '..', 'seed-assets', rendName);
+            const bundledR = path.join(__dirname, rendName); // FLAT: seed rendition at repo root
             if (fs.existsSync(bundledR)) fs.copyFileSync(bundledR, rp);
+            else { const altR = path.join(__dirname, 'seed-assets', rendName); if (fs.existsSync(altR)) fs.copyFileSync(altR, rp); }
           }
           if (fs.existsSync(rp)) rendition = rendName;
         }
@@ -233,8 +237,9 @@ seed();
     const rendName = 'seed-last-checkpoint-ep1-480p.mp4';
     const rp = path.join(DATA_DIR, 'uploads/videos', rendName);
     if (!fs.existsSync(rp)) {
-      const bundledR = path.join(__dirname, '..', 'seed-assets', rendName);
+      const bundledR = path.join(__dirname, rendName); // FLAT: seed rendition at repo root
       if (fs.existsSync(bundledR)) fs.copyFileSync(bundledR, rp);
+      else { const altR = path.join(__dirname, 'seed-assets', rendName); if (fs.existsSync(altR)) fs.copyFileSync(altR, rp); }
     }
     if (fs.existsSync(rp)) db.prepare('UPDATE episodes SET rendition_file=? WHERE id=?').run(rendName, ep.id);
   } catch { /* rendition is optional — never block boot */ }

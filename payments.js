@@ -1,5 +1,5 @@
 /**
- * server/payments.js — coin packs + VIP behind a processor interface.
+ * payments.js — coin packs + VIP behind a processor interface.
  * DEMO mode (default): checkout completes instantly, clearly labeled demo,
  * no real payment, coins land instantly.
  * To go live with Stripe: set PAYMENT_PROCESSOR=stripe + STRIPE_SECRET_KEY
@@ -21,13 +21,13 @@ const PACKS = [
 function getPack(id) { return PACKS.find(p => p.id === id) || null; }
 function providerStatus() {
   const processor = (process.env.PAYMENT_PROCESSOR || 'demo').toLowerCase();
-  return { processor, mode: processor === 'demo' ? 'demo' : 'live', configured: processor === 'demo' ? true : Boolean(process.env.STRIPE_SECRET_KEY), note: processor === 'demo' ? 'Demo checkout is active — no real payment is taken.' : 'Stripe selected; wire createCheckout/verifyWebhook in server/payments.js.' };
+  return { processor, mode: processor === 'demo' ? 'demo' : 'live', configured: processor === 'demo' ? true : Boolean(process.env.STRIPE_SECRET_KEY), note: processor === 'demo' ? 'Demo checkout is active — no real payment is taken.' : 'Stripe selected; wire createCheckout/verifyWebhook in payments.js.' };
 }
 function createCheckout(userId, packId) {
   const pack = getPack(packId);
   if (!pack) throw Object.assign(new Error('Unknown pack.'), { code: 'BAD_PACK' });
   const status = providerStatus();
-  if (status.mode !== 'demo') throw Object.assign(new Error('Live checkout is not wired yet — see server/payments.js.'), { code: 'NOT_CONFIGURED' });
+  if (status.mode !== 'demo') throw Object.assign(new Error('Live checkout is not wired yet — see payments.js.'), { code: 'NOT_CONFIGURED' });
   const info = db.prepare(`INSERT INTO purchases (user_id, pack_id, coins, amount_cents, status, provider) VALUES (?,?,?,?,'completed','demo')`).run(userId, pack.id, pack.coins, pack.price_cents);
   let balance = db.prepare('SELECT balance FROM users WHERE id=?').get(userId).balance;
   const grant = pack.coins + (pack.bonus_coins || 0);

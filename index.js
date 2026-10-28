@@ -1,5 +1,7 @@
 /**
- * server/index.js — Dramora backend.
+ * index.js — Dramora backend. FLAT EDITION: server + UI files all live in
+ * this same directory (repo root); the UI is served via an explicit
+ * allowlist below so server source and data/ are never exposed.
  * Viewer: catalog, detail, vertical player (Range streaming), coin unlocks,
  * shop, library. Admin: series/episode CRUD + uploads (multer) + stats.
  */
@@ -404,10 +406,21 @@ app.delete('/api/admin/episodes/:id', requireAuth, requireAdmin, (req, res) => {
   return res.json({ ok: true });
 });
 
-// ---------- static SPA ----------
-app.use(express.static(path.join(__dirname, '..', 'public')));
+// ---------- static SPA (FLAT: explicit allowlist only) ----------
+// The UI files sit in this same directory as the server code. A blanket
+// express.static(__dirname) would also expose index.js/db.js/package.json
+// and is NOT used. Only the known public files below are served; every
+// other path falls through to the SPA shell, never to a file on disk.
+const PUBLIC_FILES = ['index.html', 'app.js', 'styles.css', 'manifest.webmanifest', 'sw.js', 'icon.svg'];
+for (const file of PUBLIC_FILES) {
+  app.get('/' + file, (_req, res) => {
+    if (file === 'sw.js') { res.set('Service-Worker-Allowed', '/'); res.set('Cache-Control', 'no-cache'); }
+    res.sendFile(path.join(__dirname, file));
+  });
+}
+app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/') || req.path.startsWith('/media/') || req.path.startsWith('/stream/')) return next();
-  return res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+  return res.sendFile(path.join(__dirname, 'index.html'));
 });
 app.listen(PORT, () => console.log(`[dramora] listening on http://localhost:${PORT} · payments: ${payments.providerStatus().mode}`));

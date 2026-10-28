@@ -1,0 +1,138 @@
+/* Dramora SPA — vanilla JS, all data from /api. */
+'use strict';
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const state={user:null,home:null,series:[],genres:[],genre:'All',detail:null,episodes:[],seasons:[],playerEp:null,playerList:[],adminSeries:[],adminSeriesId:null,saveTimer:null,quality:'original',branding:null};
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function toast(m,ms=3400){const t=$('#toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.add('hidden'),ms)}
+async function api(path,opts={}){const isForm=opts.body instanceof FormData;const res=await fetch(path,{headers:isForm?{}:{'Content-Type':'application/json'},...opts});const d=await res.json().catch(()=>({}));if(!res.ok){const e=new Error(d.error||`Failed (${res.status})`);e.data=d;e.status=res.status;throw e}return d}
+function fmtDate(iso){try{return new Date(iso).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}catch{return ''}}
+function updateBalance(){$('#balanceText').textContent=state.user?state.user.balance:0;$('#mineBalance').textContent=state.user?state.user.balance:0;const vip=state.user&&state.user.is_vip;$('#vipBadge').textContent=vip?' · 👑 VIP active':'';const vs=$('#vipStatus');if(vs)vs.innerHTML=vip?`👑 <b>VIP active</b> — every episode unlocked, ad-free${state.user.vip_until?`, until ${fmtDate(state.user.vip_until)}`:''}.`:'No VIP plan. VIP Weekly / Monthly in the Shop unlocks everything and skips ads.'}
+function posterCard(s,wide=false){return `<div class="poster-card ${wide?'wide':''}" data-open-series="${s.id}"><div class="poster">${s.poster_url?`<img src="${esc(s.poster_url)}" alt="">`:`<div class="fallback">${esc(s.title.slice(0,2).toUpperCase())}</div>`}${s.is_18plus?'<span class="badge18">18+</span>':''}<span class="genre-tag">${esc(s.genre)}</span></div><div class="p-title">${esc(s.title)}</div><div class="p-meta">${s.episode_count} eps · 👁 ${s.views||0}${s.in_my_list?' · ♥ In List':''}</div></div>`}
+function showPage(name){$$('.page').forEach(p=>p.classList.toggle('hidden',p.dataset.page!==name));$$('.navbtn').forEach(b=>b.classList.toggle('active',b.dataset.nav===name))}
+function goTo(name){showPage(name);if(name==='home')loadHome();if(name==='mine'){loadLibrary();loadWallet()}if(name==='shop')loadShop();if(name==='admin'&&state.user?.is_admin)loadAdmin()}
+async function loadHome(){try{const h=await api('/api/home');state.home=h;renderHome()}catch(e){toast(e.message)}}
+function renderHome(){const h=state.home;if(!h)return;
+ $('#hero').innerHTML=h.hero?`<div class="hero" data-open-series="${h.hero.id}">${h.hero.poster_url?`<img src="${esc(h.hero.poster_url)}">`:''}<div class="hero-body"><h2>${esc(h.hero.title)}</h2><p>${esc(h.hero.synopsis.slice(0,140))}…</p><button class="btn btn-grad btn-sm">▶ Watch now</button></div></div>`:'';
+ const genres=['All',...(h.genres||[])];$('#genreChips').innerHTML=genres.map(g=>`<button class="chip ${g===state.genre?'active':''}" data-genre="${esc(g)}">${esc(g)}</button>`).join('');
+ $$('#genreChips [data-genre]').forEach(c=>c.addEventListener('click',async()=>{state.genre=c.dataset.genre;await loadCatalog()}));
+ $('#continueRail').innerHTML=h.continue_watching?.length?`<h3 class="section-title">▶ Continue Watching</h3>`+h.continue_watching.map(r=>contCard(r)).join(''):'';
+ $('#trendingRail').innerHTML=h.trending.map(s=>posterCard(s)).join('')||'<p class="muted">No series yet.</p>';
+ $('#newGrid').innerHTML=h.new_releases.map(s=>posterCard(s,true)).join('');
+ bindSeriesCards(document);}
+function contCard(r){const pct=r.duration_sec?Math.min(100,Math.round((r.progress_sec/r.duration_sec)*100)):0;return `<div class="cont-card" data-play-cont="${r.episode_id}" data-series-cont="${r.series_id}">${r.poster_url?`<img src="${esc(r.poster_url)}">`:''}<div style="flex:1"><b>${esc(r.series_title)}</b><div class="muted small">Ep ${r.ep_number} · ${esc(r.ep_title||'')}</div><div class="progressbar"><div style="width:${pct}%"></div></div></div><span>▶</span></div>`}
+function bindSeriesCards(root){$$('[data-open-series]').forEach(el=>el.addEventListener('click',()=>openSeries(Number(el.dataset.openSeries))));$$('[data-play-cont]').forEach(el=>el.addEventListener('click',async()=>{await openSeries(Number(el.dataset.seriesCont));openPlayer(Number(el.dataset.playCont))}))}
+async function loadCatalog(){const q=$('#searchInput').value.trim();const params=new URLSearchParams();if(state.genre!=='All')params.set('genre',state.genre);if(q)params.set('q',q);const {series}=await api('/api/series?'+params);state.series=series;
+ $('#searchResults').innerHTML=(q||state.genre!=='All')?`<h3 class="section-title">Results (${series.length})</h3><div class="grid">${series.map(s=>posterCard(s,true)).join('')||'<p class="muted">Nothing matches.</p>'}</div>`:'';
+ // also refresh trending filter display via chips active state
+ $$('#genreChips [data-genre]').forEach(c=>c.classList.toggle('active',c.dataset.genre===state.genre));bindSeriesCards($('#searchResults'))}
+async function openSeries(id){try{const d=await api(`/api/series/${id}`);state.detail=d.series;state.episodes=d.episodes;state.seasons=d.seasons||[];renderDetail();showPage('detail')}catch(e){toast(e.message)}}
+function renderDetail(){const s=state.detail;$('#detailBody').innerHTML=`
+ <div class="detail-hero"><div class="poster">${s.poster_url?`<img src="${esc(s.poster_url)}">`:`<div class="fallback">${esc(s.title)}</div>`}${s.is_18plus?'<span class="badge18">18+</span>':''}</div></div>
+ <h2 style="margin:12px 0 4px">${esc(s.title)}</h2><div class="muted small">${esc(s.genre)} · ${esc(s.tags)} · ${s.episode_count} episodes · First ${s.free_episodes} free, then 🪙 ${s.coin_price}/ep</div>
+ <p class="synopsis">${esc(s.synopsis)}</p>
+ <button class="btn ${s.in_my_list?'':'btn-grad'} btn-block" id="myListBtn">${s.in_my_list?'♥ In My List — tap to remove':'+ Add to My List'}</button>
+ <button class="btn btn-grad btn-block" id="watchFirst">▶ Watch Episode 1</button>
+ <h3 class="section-title">Episodes</h3>${epGridHtml()}
+ <p class="muted small" style="margin-top:10px">Dimmed episodes have no video uploaded yet — the admin can add them in Admin.</p>`;
+ function epBtn(ep){return `<button class="ep-btn ${ep.has_video?'':'no-video'}" data-ep="${ep.id}">${ep.ep_number}${ep.unlocked?'<span class="freeb">'+(ep.is_free?'FREE':'OPEN')+'</span>':`<span class="lock">🔒 ${ep.price}</span>`}</button>`}
+ function epGridHtml(){const multi=state.seasons.length>1;if(!multi)return `<div class="ep-grid">${state.episodes.map(epBtn).join('')}</div>`;return state.seasons.map(g=>`<h4 class="season-title">Season ${g.season_number}</h4><div class="ep-grid">${g.episodes.map(epBtn).join('')}</div>`).join('')}
+ $('#myListBtn').addEventListener('click',async()=>{try{const r=await api(`/api/series/${s.id}/mylist`,{method:'POST'});s.in_my_list=r.in_my_list;renderDetail();toast(r.in_my_list?'Added to My List':'Removed from My List')}catch(e){toast(e.message)}});
+ $('#watchFirst').addEventListener('click',()=>{if(state.episodes[0])openPlayer(state.episodes[0].id)});
+ $$('#detailBody [data-ep]').forEach(b=>b.addEventListener('click',()=>openPlayer(Number(b.dataset.ep))))}
+// ---- Player ----
+async function openPlayer(epId){
+ $('#player').classList.remove('hidden');$('#playerMsg').classList.add('hidden');
+ const video=$('#playerVideo');video.removeAttribute('src');video.load();
+ try{const r=await api(`/api/episodes/${epId}/play`,{method:'POST',body:JSON.stringify({})});
+   state.playerEp=r.episode;state.playerList=r.episodes;state.streamOriginal=r.stream_url;state.stream480=r.stream_url_480;
+   $('#playerTitle').textContent=`${r.series.title} · Ep ${r.episode.ep_number} — ${r.episode.title}`;
+   const qsel=$('#qualitySel');
+   if(r.episode.has_rendition&&r.stream_url_480){qsel.classList.remove('hidden')}else{qsel.classList.add('hidden');state.quality='original';qsel.value='original'}
+   video.src=state.quality==='480'&&r.stream_url_480?r.stream_url_480:r.stream_url;
+   const start=r.episode.progress_sec||0;
+   video.addEventListener('loadedmetadata',function h(){if(start>5&&start<video.duration-5)video.currentTime=start;video.removeEventListener('loadedmetadata',h)});
+   video.play().catch(()=>{});
+   video.ontimeupdate=()=>{clearTimeout(state.saveTimer);state.saveTimer=setTimeout(()=>{api(`/api/episodes/${epId}/progress`,{method:'POST',body:JSON.stringify({progress_sec:video.currentTime,duration_sec:video.duration})}).catch(()=>{})},1200)};
+ }catch(e){
+   if(e.status===402){showUnlockPrompt(epId,e.data)}
+   else{$('#playerMsg').classList.remove('hidden');$('#playerMsg').innerHTML=`<p>${esc(e.message)}</p><button class="btn btn-grad" onclick="document.querySelector('#player').classList.add('hidden')">Close</button>`}
+ }}
+function showUnlockPrompt(epId,data){const price=data.price;const vip=state.user&&state.user.is_vip;$('#playerMsg').classList.remove('hidden');$('#playerMsg').innerHTML=`<h3>🔒 Locked episode</h3><p>Unlock for <b>🪙 ${price}</b> — yours forever. Your balance: 🪙 ${data.balance??state.user.balance}</p><button class="btn btn-grad btn-block" id="unlockBtn">🪙 Unlock with coins (${price})</button>${vip?'':`<button class="btn btn-block" id="unlockAd">📺 Watch ad to unlock (free)</button><button class="btn btn-block" id="unlockVip">👑 Go VIP — unlock everything</button>`}<button class="btn btn-ghost btn-block" id="unlockShop">Get coins in Shop</button><p class="muted small">Ads are a DEMO simulation — real ads need an AdMob / ad-network account.</p>`;
+ $('#unlockBtn').addEventListener('click',async()=>{try{const r=await api(`/api/episodes/${epId}/unlock`,{method:'POST',body:JSON.stringify({})});if(state.user)state.user.balance=r.balance;updateBalance();toast('Unlocked — enjoy!');openPlayer(epId)}catch(err){toast(err.message);if(err.data?.need_shop){closePlayer();goTo('shop')}}});
+ const adBtn=$('#unlockAd');if(adBtn)adBtn.addEventListener('click',()=>{watchAd('unlock',epId,()=>{toast('Unlocked with ad — enjoy!');openPlayer(epId)})});
+ const vipBtn=$('#unlockVip');if(vipBtn)vipBtn.addEventListener('click',()=>{closePlayer();goTo('shop')});
+ $('#unlockShop').addEventListener('click',()=>{closePlayer();goTo('shop')})}
+function closePlayer(){const v=$('#playerVideo');v.pause();v.removeAttribute('src');v.load();$('#player').classList.add('hidden');if(state.detail)openSeries(state.detail.id)}
+function stepEp(dir){if(!state.playerEp)return;const idx=state.playerList.findIndex(e=>e.id===state.playerEp.id);const n=state.playerList[idx+dir];if(n)openPlayer(n.id);else toast(dir>0?'That was the last episode':'That was the first episode')}
+function switchQuality(q){if(q===state.quality)return;const target=q==='480'?state.stream480:state.streamOriginal;if(!target)return;const video=$('#playerVideo');const t=video.currentTime||0;const wasPlaying=!video.paused;state.quality=q;video.src=target;video.addEventListener('loadedmetadata',function h(){try{video.currentTime=t}catch{}video.removeEventListener('loadedmetadata',h);if(wasPlaying)video.play().catch(()=>{})})}
+// ---- v2: rewarded ads (DEMO simulated spot — real network plugs into server/ads.js) ----
+function watchAd(kind,episodeId,onDone){
+ api('/api/ads/session',{method:'POST',body:JSON.stringify({kind,episode_id:episodeId||null})}).then(sess=>{
+  const ov=$('#adOverlay'),count=$('#adCount'),bar=$('#adProgress'),claim=$('#adClaimBtn'),hint=$('#adHint');
+  ov.classList.remove('hidden');claim.classList.add('hidden');hint.textContent='Ad playing — reward unlocks when it finishes…';
+  const total=sess.duration_sec||15;const started=Date.now();
+  count.textContent=total;bar.style.width='0%';
+  const iv=setInterval(()=>{const el=(Date.now()-started)/1000;const left=Math.max(0,Math.ceil(total-el));count.textContent=left;bar.style.width=Math.min(100,(el/total)*100)+'%';
+   if(el>=total){clearInterval(iv);count.textContent='✓';claim.classList.remove('hidden');hint.textContent='Ad finished — claim your reward.'}},200);
+  claim.onclick=async()=>{claim.disabled=true;try{const r=await api('/api/ads/complete',{method:'POST',body:JSON.stringify({token:sess.token})});ov.classList.add('hidden');if(r.balance!=null&&state.user){state.user.balance=r.balance;updateBalance()}if(onDone)onDone(r)}catch(e){toast(e.message);ov.classList.add('hidden')}claim.disabled=false};
+ }).catch(e=>toast(e.message))}
+// ---- Shop / wallet / library ----
+async function loadShop(){try{const {packs,provider}=await api('/api/shop/packs');$('#packList').innerHTML=packs.map(p=>`<div class="pack ${p.popular?'popular':''}">${p.popular?'<span class="pop-tag">MOST POPULAR</span>':''}<div class="pname">${esc(p.name)}</div><div class="pcredits">${p.coins?`🪙 ${p.coins}`:'👑 VIP'}${p.vip_days?` <span class="small">${p.vip_days} days · all episodes · ad-free</span>`:''}${p.bonus_coins?` <span class="small">+${p.bonus_coins} bonus</span>`:''}</div><div class="pprice">$${(p.price_cents/100).toFixed(2)} · ${esc(p.blurb)}</div><button class="btn btn-grad btn-block" data-buy="${p.id}">Buy (Demo checkout)</button></div>`).join('');
+ $('#shopNote').textContent=provider.mode==='demo'?'🧪 DEMO checkout — no real payment is taken. Coins land instantly so you can test unlocks. Stripe wiring point: server/payments.js':`Payments via ${provider.processor}.`;
+ try{const st=await api('/api/ads/status');$('#earnStatus').textContent=`${st.earned_today}/${st.earn_daily_cap} earned today${st.earn_remaining<=0?' — daily limit reached':''}`;$('#earnAdBtn').disabled=st.earn_remaining<=0||!!(state.user&&state.user.is_vip);if(state.user&&state.user.is_vip)$('#earnStatus').textContent='VIP is ad-free — no ads for you.'}catch{}
+ $$('#packList [data-buy]').forEach(b=>b.addEventListener('click',async()=>{b.disabled=true;try{const r=await api('/api/shop/checkout',{method:'POST',body:JSON.stringify({packId:b.dataset.buy})});state.user=r.user||state.user;if(r.balance!=null&&state.user)state.user.balance=r.balance;updateBalance();toast('Demo checkout complete — no real payment taken.')}catch(e){toast(e.message)}b.disabled=false}))}catch(e){toast(e.message)}}
+async function loadWallet(){try{const w=await api('/api/wallet');if(state.user){state.user.balance=w.balance;state.user.is_vip=w.is_vip;state.user.vip_until=w.vip_until}updateBalance();$('#ledgerList').innerHTML=w.ledger.length?w.ledger.map(r=>`<div class="lrow"><span><b>${esc(r.note||r.kind)}</b><br>${esc(r.created_at)}</span><span class="${r.delta>=0?'pos':'neg'}">${r.delta>=0?'+':''}${r.delta} 🪙</span></div>`).join(''):'<p class="muted">No transactions yet.</p>'}catch{}}
+async function loadLibrary(){try{const l=await api('/api/library');$('#myListRail').innerHTML=l.my_list.length?l.my_list.map(s=>posterCard(s)).join(''):'<p class="muted">Nothing saved yet — open a series and tap Add to My List.</p>';
+ $('#mineContinue').innerHTML=l.continue_watching.length?l.continue_watching.map(r=>contCard(r)).join(''):'<p class="muted">Start watching and your progress will show here.</p>';
+ $('#myUnlocks').innerHTML=l.unlocks.length?l.unlocks.map(u=>`<div class="cont-card" data-goto-series="${u.series_id}"><div style="flex:1"><b>${esc(u.series_title)}</b><div class="muted small">Ep ${u.ep_number} · ${esc(u.ep_title||'')} · ${u.source==='ad'?'📺 unlocked with ad':'🪙 '+u.price_paid}</div></div><span>🔓</span></div>`).join(''):'<p class="muted">Locked episodes you unlock will live here, permanently.</p>';
+ bindSeriesCards(document);$$('#myUnlocks [data-goto-series]').forEach(el=>el.addEventListener('click',()=>openSeries(Number(el.dataset.gotoSeries))))}catch(e){toast(e.message)}}
+// ---- v2: branding + notifications ----
+async function applyBranding(){try{const{branding}=await api('/api/branding');state.branding=branding;document.title=`${branding.app_name} — Short Drama Streaming`;$$('.brand-name').forEach(el=>el.textContent=branding.app_name);const tg=$('#brandTagline');if(tg&&branding.tagline)tg.textContent=branding.tagline;if(branding.accent_color){document.documentElement.style.setProperty('--accent',branding.accent_color);document.documentElement.style.setProperty('--pink',branding.accent_color);document.documentElement.style.setProperty('--grad',`linear-gradient(92deg, ${branding.accent_color}, #ff2e63 55%, #8a5cf6)`)}if(branding.logo_url){['#brandLogoAuth','#brandLogoMain'].forEach(sel=>{const img=$(sel);if(img){img.src=branding.logo_url;img.classList.remove('hidden')}})}}catch{}}
+async function updateNotifBadge(){try{const r=await api('/api/notifications');const b=$('#notifBadge');b.textContent=r.unread_count;b.classList.toggle('hidden',!r.unread_count)}catch{}}
+async function loadNotifications(){try{const r=await api('/api/notifications');$('#notifList').innerHTML=r.notifications.length?r.notifications.map(n=>`<div class="notif-item ${n.read?'':'unread'}"><b>${esc(n.title)}</b>${n.is_broadcast?' <span class="muted small">· 📣 broadcast</span>':''}<div class="small" style="margin-top:4px">${esc(n.body)}</div><div class="muted small">${esc(n.created_at)}${n.read?'':' · unread'}</div></div>`).join(''):'<p class="muted">No notifications yet.</p>';updateNotifBadge()}catch(e){toast(e.message)}}
+
+// ---- Admin ----
+async function loadAdmin(){try{const s=await api('/api/admin/stats');$('#adminStats').innerHTML=`Series <b>${s.stats.series}</b> · Episodes <b>${s.stats.episodes}</b> (${s.stats.episodes_with_video} with video) · Users <b>${s.stats.users}</b><br>Views <b>${s.stats.total_views}</b> · Unlocks <b>${s.stats.total_unlocks}</b> · Coins spent <b>${s.stats.total_coins_spent}</b> · Purchases <b>${s.stats.purchases}</b><br><span class="muted">Payments: ${esc(s.payments.mode)} (${esc(s.payments.processor)})</span>`;
+ try{const bs=await api('/api/admin/settings');$('#bfName').value=bs.settings.app_name;$('#bfTagline').value=bs.settings.tagline;$('#bfAccent').value=bs.settings.accent_color}catch{}
+ const {series}=await api('/api/admin/series');state.adminSeries=series;
+ $('#adminSeriesList').innerHTML=series.map(x=>`<div class="admin-item"><b>${esc(x.title)}</b> <span class="muted small">${esc(x.status)} · ${x.episode_count} eps · ${esc(x.genre)}</span><div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button class="btn btn-sm" data-edit-series="${x.id}">Edit</button><button class="btn btn-sm" data-eps-series="${x.id}">Episodes</button><button class="btn btn-sm btn-ghost" data-del-series="${x.id}">Delete</button></div></div>`).join('')||'<p class="muted">No series yet.</p>';
+ $$('#adminSeriesList [data-edit-series]').forEach(b=>b.addEventListener('click',()=>fillSeriesForm(Number(b.dataset.editSeries))));
+ $$('#adminSeriesList [data-del-series]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Delete this series and its episodes?'))return;await api(`/api/admin/series/${b.dataset.delSeries}`,{method:'DELETE'});loadAdmin();toast('Series deleted')}));
+ $$('#adminSeriesList [data-eps-series]').forEach(b=>b.addEventListener('click',()=>loadEpisodeManager(Number(b.dataset.epsSeries))))}catch(e){toast(e.message)}}
+function fillSeriesForm(id){const s=state.adminSeries.find(x=>x.id===id);if(!s)return;$('#seriesFormWrap').open=true;$('#sfId').value=s.id;$('#sfTitle').value=s.title;$('#sfGenre').value=s.genre;$('#sfSynopsis').value=s.synopsis;$('#sfTags').value=s.tags;$('#sfStatus').value=s.status;$('#sfFree').value=s.free_episodes;$('#sfPrice').value=s.coin_price;$('#sf18').checked=!!s.is_18plus;$('#posterForm').classList.remove('hidden');state.adminSeriesId=id;window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'})}
+async function loadEpisodeManager(seriesId){state.adminSeriesId=seriesId;try{const d=await api(`/api/admin/series/${seriesId}/episodes`);$('#episodeManager').innerHTML=`<h3 class="section-title">Episodes — ${esc(d.series.title)}</h3>`+d.episodes.map(ep=>`<div class="admin-item"><b>S${ep.season_number||1} · Ep ${ep.ep_number}</b> ${esc(ep.title)} <span class="muted small">${ep.video_file?`🎬 ${(ep.file_size/1048576).toFixed(1)} MB · ${ep.duration_sec?Math.round(ep.duration_sec)+'s':''} · 👁 ${ep.views}${ep.rendition_file?' · 480p ✓':' · 480p pending…'}`:'⚠️ no video yet'}</span> <button class="btn btn-sm btn-ghost" data-del-ep="${ep.id}">Delete ep</button></div>`).join('')+`
+ <form id="epUploadForm" class="form studio"><label>Season number<input type="number" id="epSeason" min="1" value="1" required></label><label>Episode number<input type="number" id="epNum" min="1" required></label><label>Title<input type="text" id="epTitle"></label><label>Video MP4 (up to 500MB)<input type="file" id="epVideo" accept="video/*"></label><label>Thumbnail image (optional)<input type="file" id="epThumb" accept="image/*"></label><button class="btn btn-grad btn-block" type="submit">Upload / update episode</button><p class="muted small">Uploading to an existing episode number replaces its video. A 480p rendition is generated automatically in the background.</p></form>`;
+ $$('#episodeManager [data-del-ep]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Delete this episode?'))return;await api(`/api/admin/episodes/${b.dataset.delEp}`,{method:'DELETE'});loadEpisodeManager(seriesId);loadAdmin()}));
+ $('#epUploadForm').addEventListener('submit',async(e)=>{e.preventDefault();const fd=new FormData();fd.append('ep_number',$('#epNum').value);fd.append('season_number',$('#epSeason').value);fd.append('title',$('#epTitle').value);const v=$('#epVideo').files[0];if(v)fd.append('video',v);const th=$('#epThumb').files[0];if(th)fd.append('thumb',th);toast('Uploading… large videos can take a while.');try{await api(`/api/admin/series/${seriesId}/episodes`,{method:'POST',body:fd});toast('Episode saved.');loadEpisodeManager(seriesId);loadAdmin()}catch(err){toast(err.message)}})}catch(e){toast(e.message)}}
+// ---- init ----
+document.addEventListener('DOMContentLoaded',async()=>{
+ $('#app').classList.remove('hidden');
+ $('#tabLogin').addEventListener('click',()=>{$('#tabLogin').classList.add('active');$('#tabSignup').classList.remove('active');$('#loginForm').classList.remove('hidden');$('#signupForm').classList.add('hidden')});
+ $('#tabSignup').addEventListener('click',()=>{$('#tabSignup').classList.add('active');$('#tabLogin').classList.remove('active');$('#signupForm').classList.remove('hidden');$('#loginForm').classList.add('hidden')});
+ $('#loginForm').addEventListener('submit',async(e)=>{e.preventDefault();$('#authError').textContent='';try{const{user}=await api('/api/auth/login',{method:'POST',body:JSON.stringify({email:$('#loginEmail').value,password:$('#loginPassword').value})});state.user=user;enter()}catch(err){$('#authError').textContent=err.message}});
+ $('#signupForm').addEventListener('submit',async(e)=>{e.preventDefault();$('#authError').textContent='';try{const{user,demo_grant}=await api('/api/auth/signup',{method:'POST',body:JSON.stringify({email:$('#suEmail').value,password:$('#suPassword').value})});state.user=user;toast(`Welcome to ${state.branding?state.branding.app_name:'Dramora'} — ${demo_grant} DEMO coins added.`);enter()}catch(err){$('#authError').textContent=err.message}});
+ $('#logoutBtn').addEventListener('click',async()=>{await api('/api/auth/logout',{method:'POST'});location.reload()});
+ $$('.navbtn').forEach(b=>b.addEventListener('click',()=>goTo(b.dataset.nav)));
+ $('#backHome').addEventListener('click',()=>goTo('home'));
+ $('#searchBtn').addEventListener('click',loadCatalog);
+ $('#searchInput').addEventListener('keydown',e=>{if(e.key==='Enter')loadCatalog()});
+ $('#walletPill').addEventListener('click',()=>goTo('shop'));
+ $('#qualitySel').addEventListener('change',e=>switchQuality(e.target.value));
+ $('#earnAdBtn').addEventListener('click',()=>watchAd('earn',null,()=>{toast('+10 coins from ad reward!');loadShop()}));
+ $('#notifBell').addEventListener('click',()=>{showPage('notifications');loadNotifications()});
+ $('#backFromNotif').addEventListener('click',()=>goTo('home'));
+ $('#markReadBtn').addEventListener('click',async()=>{try{await api('/api/notifications/read-all',{method:'POST',body:JSON.stringify({})});loadNotifications();toast('All caught up.')}catch(e){toast(e.message)}});
+ $('#brandingForm').addEventListener('submit',async(e)=>{e.preventDefault();try{await api('/api/admin/settings',{method:'PUT',body:JSON.stringify({app_name:$('#bfName').value,tagline:$('#bfTagline').value,accent_color:$('#bfAccent').value})});toast('Branding saved — applies on next load.');applyBranding()}catch(err){toast(err.message)}});
+ $('#logoForm').addEventListener('submit',async(e)=>{e.preventDefault();const f=$('#logoFile').files[0];if(!f)return toast('Pick a logo image.');const fd=new FormData();fd.append('logo',f);try{await api('/api/admin/branding/logo',{method:'POST',body:fd});toast('Logo uploaded.');applyBranding()}catch(err){toast(err.message)}});
+ $('#broadcastForm').addEventListener('submit',async(e)=>{e.preventDefault();try{const r=await api('/api/admin/broadcast',{method:'POST',body:JSON.stringify({title:$('#bcTitle').value,body:$('#bcBody').value})});toast(`Broadcast sent to ${r.recipients} user account(s).`);e.target.reset()}catch(err){toast(err.message)}});
+ $('#playerClose').addEventListener('click',closePlayer);
+ $('#prevEp').addEventListener('click',()=>stepEp(-1));$('#nextEp').addEventListener('click',()=>stepEp(1));
+ $('#pickEp').addEventListener('click',()=>{const p=$('#epPicker');p.classList.toggle('hidden');p.innerHTML=`<div class="ep-grid">${state.playerList.map(ep=>`<button class="ep-btn" data-pick-ep="${ep.id}">${ep.ep_number}${ep.unlocked?'':' 🔒'}</button>`).join('')}</div>`;$$('#epPicker [data-pick-ep]').forEach(b=>b.addEventListener('click',()=>{p.classList.add('hidden');openPlayer(Number(b.dataset.pickEp))}))});
+ $('#seriesForm').addEventListener('submit',async(e)=>{e.preventDefault();const id=$('#sfId').value;const body={title:$('#sfTitle').value,genre:$('#sfGenre').value,synopsis:$('#sfSynopsis').value,tags:$('#sfTags').value,status:$('#sfStatus').value,free_episodes:Number($('#sfFree').value),coin_price:Number($('#sfPrice').value),is_18plus:$('#sf18').checked};try{if(id){await api(`/api/admin/series/${id}`,{method:'PUT',body:JSON.stringify(body)})}else{const r=await api('/api/admin/series',{method:'POST',body:JSON.stringify(body)});$('#sfId').value=r.series.id;state.adminSeriesId=r.series.id;$('#posterForm').classList.remove('hidden')}toast('Series saved.');loadAdmin();loadHome()}catch(err){toast(err.message)}});
+ $('#posterForm').addEventListener('submit',async(e)=>{e.preventDefault();const id=$('#sfId').value||state.adminSeriesId;if(!id)return toast('Save the series first.');const f=$('#posterFile').files[0];if(!f)return toast('Pick a poster image.');const fd=new FormData();fd.append('poster',f);try{await api(`/api/admin/series/${id}/poster`,{method:'POST',body:fd});toast('Poster uploaded.');loadAdmin();loadHome()}catch(err){toast(err.message)}});
+ function enter(){$('#authView').classList.add('hidden');$('#mainView').classList.remove('hidden');$('#accountLine').textContent=`Signed in as ${state.user.email}${state.user.is_admin?' · Admin':''}`;if(state.user.is_admin)$('#adminNav').classList.remove('hidden');updateBalance();updateNotifBadge();loadHome();loadShop()}
+ applyBranding();
+ try{const{user}=await api('/api/auth/me');if(user){state.user=user;enter();return}}catch{}
+ $('#authView').classList.remove('hidden');
+ if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
+});

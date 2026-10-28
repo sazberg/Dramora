@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dramora — Short Drama Streaming</title>
+<meta name="theme-color" content="#0b0b10">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="app" class="app hidden">
+  <section id="authView" class="view">
+    <div class="logo-lg center"><img id="brandLogoAuth" class="brand-logo hidden" alt=""><span class="brand-name">Dram<span>ora</span></span></div>
+    <p class="tagline center" id="brandTagline">Short dramas. Big twists. One episode at a time.</p>
+    <div class="tabs"><button id="tabLogin" class="tab active">Log in</button><button id="tabSignup" class="tab">Sign up</button></div>
+    <form id="loginForm" class="form">
+      <label>Email<input type="email" id="loginEmail" required autocomplete="email"></label>
+      <label>Password<input type="password" id="loginPassword" required autocomplete="current-password"></label>
+      <button class="btn btn-grad btn-block" type="submit">Log in</button>
+    </form>
+    <form id="signupForm" class="form hidden">
+      <label>Email<input type="email" id="suEmail" required autocomplete="email"></label>
+      <label>Password (8+ characters)<input type="password" id="suPassword" required minlength="8" autocomplete="new-password"></label>
+      <button class="btn btn-grad btn-block" type="submit">Create account</button>
+      <p class="muted small">New accounts receive <b>200 DEMO coins</b>. The first account created becomes the admin (the uploader account).</p>
+    </form>
+    <p id="authError" class="error"></p>
+  </section>
+
+  <section id="mainView" class="hidden">
+    <header class="topbar">
+      <div class="logo"><img id="brandLogoMain" class="brand-logo-sm hidden" alt=""><span class="brand-name">Dram<span>ora</span></span></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="bell-btn" id="notifBell" title="Notifications">🔔<span id="notifBadge" class="notif-badge hidden">0</span></button>
+        <div class="wallet-pill" id="walletPill">🪙 <span id="balanceText">0</span></div>
+      </div>
+    </header>
+    <main id="pages">
+      <div class="page" data-page="home">
+        <div class="searchbar"><input id="searchInput" type="search" placeholder="Search dramas, genres, tags…"><button class="btn btn-sm" id="searchBtn">Search</button></div>
+        <div id="hero"></div>
+        <div class="chips" id="genreChips"></div>
+        <div id="continueRail"></div>
+        <h3 class="section-title">🔥 Trending</h3>
+        <div class="rail" id="trendingRail"></div>
+        <h3 class="section-title">✨ New Releases</h3>
+        <div class="grid" id="newGrid"></div>
+        <div id="searchResults"></div>
+      </div>
+
+      <div class="page hidden" data-page="detail">
+        <button class="btn btn-ghost btn-sm" id="backHome">← Back</button>
+        <div id="detailBody"></div>
+      </div>
+
+      <div class="page hidden" data-page="shop">
+        <h2 class="page-title">Shop</h2>
+        <p class="muted">Coins unlock episodes — forever, for your account. VIP unlocks everything while active.</p>
+        <div id="packList"></div>
+        <div class="pack" id="earnCard">
+          <div class="pname">📺 Earn free coins</div>
+          <div class="pprice">Watch a short ad, get <b>🪙 +10</b>. <span id="earnStatus" class="small"></span></div>
+          <button class="btn btn-block" id="earnAdBtn">▶ Watch ad (+10 coins)</button>
+          <p class="muted small" style="margin:8px 0 0">DEMO AD — real ads need an AdMob / ad-network account (see server/ads.js).</p>
+        </div>
+        <p class="demo-note" id="shopNote"></p>
+      </div>
+
+      <div class="page hidden" data-page="notifications">
+        <button class="btn btn-ghost btn-sm" id="backFromNotif">← Back</button>
+        <h2 class="page-title">Notifications</h2>
+        <button class="btn btn-sm" id="markReadBtn">Mark all read</button>
+        <div id="notifList" style="margin-top:12px"></div>
+      </div>
+
+      <div class="page hidden" data-page="mine">
+        <h2 class="page-title">Mine</h2>
+        <div class="wallet-box"><div>Balance: <strong>🪙 <span id="mineBalance">0</span></strong> <span id="vipBadge"></span></div><div id="vipStatus" class="small" style="margin-top:6px"></div><div id="ledgerList" class="ledger"></div></div>
+        <h3 class="section-title">My List</h3><div class="rail" id="myListRail"></div>
+        <h3 class="section-title">Continue Watching</h3><div id="mineContinue"></div>
+        <h3 class="section-title">My Unlocks</h3><div id="myUnlocks"></div>
+        <button id="logoutBtn" class="btn btn-ghost btn-block">Log out</button>
+        <p class="muted small center" id="accountLine"></p>
+      </div>
+
+      <div class="page hidden" data-page="admin">
+        <h2 class="page-title">Admin · Upload Studio</h2>
+        <div id="adminStats" class="wallet-box small"></div>
+        <details class="studio" id="brandingWrap"><summary>🎨 Branding (white-label)</summary>
+          <form id="brandingForm" class="form">
+            <label>App name<input type="text" id="bfName" maxlength="40"></label>
+            <label>Tagline<input type="text" id="bfTagline" maxlength="120"></label>
+            <label>Accent color<input type="color" id="bfAccent" value="#ff2e63"></label>
+            <button class="btn btn-grad btn-block" type="submit">Save branding</button>
+            <p class="muted small">Changes apply across the app on next load.</p>
+          </form>
+          <form id="logoForm" class="form">
+            <label>Logo image (optional)<input type="file" id="logoFile" accept="image/*"></label>
+            <button class="btn btn-block" type="submit">Upload logo</button>
+          </form>
+        </details>
+        <details class="studio" id="broadcastWrap"><summary>📣 Broadcast notification</summary>
+          <form id="broadcastForm" class="form">
+            <label>Title<input type="text" id="bcTitle" maxlength="120" required></label>
+            <label>Message<textarea id="bcBody" rows="3" maxlength="1000"></textarea></label>
+            <button class="btn btn-grad btn-block" type="submit">Send to all users</button>
+            <p class="muted small">Lands in every user's in-app Notifications inbox (🔔). Live phone push needs VAPID keys + HTTPS — not wired yet.</p>
+          </form>
+        </details>
+        <h3 class="section-title">Series</h3>
+        <div id="adminSeriesList"></div>
+        <details class="studio" id="seriesFormWrap"><summary>＋ Create / edit series</summary>
+          <form id="seriesForm" class="form">
+            <input type="hidden" id="sfId">
+            <label>Title<input type="text" id="sfTitle" required></label>
+            <label>Genre<input type="text" id="sfGenre" required placeholder="Romance"></label>
+            <label>Synopsis<textarea id="sfSynopsis" rows="3"></textarea></label>
+            <label>Tags (comma separated)<input type="text" id="sfTags"></label>
+            <label>Status<select id="sfStatus"><option value="published">Published</option><option value="draft">Draft</option></select></label>
+            <label>Free episodes<input type="number" id="sfFree" min="0" value="3"></label>
+            <label>Coin price per locked episode<input type="number" id="sfPrice" min="0" value="15"></label>
+            <label class="check"><input type="checkbox" id="sf18"><span>18+ title</span></label>
+            <button class="btn btn-grad btn-block" type="submit">Save series</button>
+          </form>
+          <form id="posterForm" class="form hidden">
+            <label>Poster image<input type="file" id="posterFile" accept="image/*"></label>
+            <button class="btn btn-block" type="submit">Upload poster</button>
+          </form>
+        </details>
+        <div id="episodeManager"></div>
+      </div>
+    </main>
+    <nav class="bottomnav">
+      <button data-nav="home" class="navbtn active"><span class="navicon">🏠</span>Home</button>
+      <button data-nav="shop" class="navbtn"><span class="navicon">🛍️</span>Shop</button>
+      <button data-nav="mine" class="navbtn"><span class="navicon">👤</span>Mine</button>
+      <button data-nav="admin" class="navbtn hidden" id="adminNav"><span class="navicon">⬆️</span>Admin</button>
+    </nav>
+  </section>
+</div>
+
+<div id="player" class="player hidden">
+  <button id="playerClose" class="pclose">✕</button>
+  <div class="ptitle" id="playerTitle"></div>
+  <video id="playerVideo" playsinline controls preload="auto"></video>
+  <div id="playerMsg" class="pmsg hidden"></div>
+  <div class="pcontrols">
+    <button class="btn btn-sm" id="prevEp">← Prev</button>
+    <button class="btn btn-sm" id="pickEp">Episodes</button>
+    <button class="btn btn-sm" id="nextEp">Next →</button>
+    <select id="qualitySel" class="quality-sel hidden" title="Video quality">
+      <option value="original">Original</option>
+      <option value="480">480p</option>
+    </select>
+  </div>
+  <div id="epPicker" class="ep-picker hidden"></div>
+</div>
+
+<div id="adOverlay" class="ad-overlay hidden">
+  <div class="ad-card">
+    <div class="ad-tag">DEMO AD — real ads need an AdMob / ad-network account</div>
+    <div class="ad-creative">📺<br>Your ad would play here<br><span class="small">(simulated 15-second spot)</span></div>
+    <div class="ad-count" id="adCount">15</div>
+    <div class="progressbar"><div id="adProgress" style="width:0%"></div></div>
+    <button class="btn btn-grad btn-block hidden" id="adClaimBtn">Claim reward →</button>
+    <p class="muted small center" id="adHint">Ad playing — reward unlocks when it finishes…</p>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<script src="/app.js"></script>
+</body>
+</html>

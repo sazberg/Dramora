@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: dramora
+    runtime: node
+    # Starter (paid) is required: Render only attaches persistent disks to paid
+    # services, and Dramora's data/ holds the accounts DB plus every uploaded
+    # episode — on a free/ephemeral disk all of it would vanish on restart.
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    disk:
+      name: dramora-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 10
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: PAYMENT_PROCESSOR
+        value: demo

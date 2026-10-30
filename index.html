@@ -3,7 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Dramora — Short Drama Streaming</title>
+<title>__OG_TITLE__</title>
+<meta name="description" content="__OG_DESC__">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Dramora">
+<meta property="og:title" content="__OG_TITLE__">
+<meta property="og:description" content="__OG_DESC__">
+<meta property="og:image" content="__OG_IMAGE__">
+<meta property="og:url" content="__OG_URL__">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#0b0b10">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
@@ -29,6 +37,18 @@
     <p id="authError" class="error"></p>
   </section>
 
+
+  <section id="landingView" class="view hidden">
+    <div class="landing">
+      <div class="detail-hero"><div class="poster" id="ldPoster"></div></div>
+      <h2 id="ldTitle" style="text-align:center;margin:14px 0 4px"></h2>
+      <p class="muted" id="ldMeta" style="text-align:center;margin:0 0 10px"></p>
+      <p id="ldSynopsis" style="line-height:1.55"></p>
+      <button class="btn btn-grad btn-block" id="ldWatch" style="margin-top:14px">▶ Watch Episode 1 — FREE</button>
+      <button class="btn btn-block" id="ldSignup" style="margin-top:8px">Sign up free — get 200 coins</button>
+      <p class="muted small" style="text-align:center;margin-top:10px">Already have an account? <a href="#" id="ldLogin">Log in</a></p>
+    </div>
+  </section>
   <section id="mainView" class="hidden">
     <header class="topbar">
       <div class="logo"><img id="brandLogoMain" class="brand-logo-sm hidden" alt=""><span class="brand-name">Dram<span>ora</span></span></div>

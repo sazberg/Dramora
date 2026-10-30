@@ -1,5 +1,7 @@
 /**
- * server/index.js — Dramora backend.
+ * index.js — Dramora backend. FLAT EDITION: server + UI files all live in
+ * this same directory (repo root); the UI is served via an explicit
+ * allowlist below so server source and data/ are never exposed.
  * Viewer: catalog, detail, vertical player (Range streaming), coin unlocks,
  * shop, library. Admin: series/episode CRUD + uploads (multer) + stats.
  */
@@ -404,10 +406,50 @@ app.delete('/api/admin/episodes/:id', requireAuth, requireAdmin, (req, res) => {
   return res.json({ ok: true });
 });
 
-// ---------- static SPA ----------
-app.use(express.static(path.join(__dirname, '..', 'public')));
+// ---------- static SPA (FLAT: explicit allowlist only) ----------
+// The UI files sit in this same directory as the server code. A blanket
+// express.static(__dirname) would also expose index.js/db.js/package.json
+// and is NOT used. Only the known public files below are served; every
+// other path falls through to the SPA shell, never to a file on disk.
+const PUBLIC_FILES = ['index.html', 'app.js', 'styles.css', 'manifest.webmanifest', 'sw.js', 'icon.svg'];
+for (const file of PUBLIC_FILES) {
+  app.get('/' + file, (req, res) => {
+    if (file === 'index.html') return serveShell(req, res, shellDefaults(req));
+    if (file === 'sw.js') { res.set('Service-Worker-Allowed', '/'); res.set('Cache-Control', 'no-cache'); }
+    res.sendFile(path.join(__dirname, file));
+  });
+}
+// ---------- Ad landing pages ----------
+// Every published series gets a shareable link: /s/<id>
+// Facebook / social crawlers read the Open Graph tags (poster + title +
+// synopsis) straight from this server-rendered shell; real visitors get the
+// app, which opens that series (guests see a public landing page first).
+const SHELL = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+function escAttr(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+function baseUrl(req) { const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0]; return proto + '://' + req.get('host'); }
+function shellDefaults(req) {
+  let name = 'Dramora', tagline = 'Short dramas. Big twists. One episode at a time.';
+  try { const st = getSettings(); if (st.app_name) name = st.app_name; if (st.tagline) tagline = st.tagline; } catch {}
+  return { title: name + ' — Short Drama Streaming', desc: tagline, image: baseUrl(req) + '/icon.svg', url: baseUrl(req) + '/' };
+}
+function serveShell(req, res, og) {
+  const html = SHELL.replaceAll('__OG_TITLE__', escAttr(og.title)).replaceAll('__OG_DESC__', escAttr(og.desc)).replaceAll('__OG_IMAGE__', escAttr(og.image)).replaceAll('__OG_URL__', escAttr(og.url));
+  res.type('html').send(html);
+}
+app.get('/s/:id', (req, res) => {
+  const s = db.prepare('SELECT * FROM series WHERE id = ? AND status = ?').get(Number(req.params.id), 'published');
+  if (!s) return res.redirect('/');
+  const base = baseUrl(req);
+  serveShell(req, res, {
+    title: s.title + ' — Watch on Dramora',
+    desc: (s.synopsis || 'Watch this short drama on Dramora.').slice(0, 200),
+    image: s.poster_file ? base + '/media/posters/' + s.poster_file : base + '/icon.svg',
+    url: base + '/s/' + s.id
+  });
+});
+app.get('/', (req, res) => serveShell(req, res, shellDefaults(req)));
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/') || req.path.startsWith('/media/') || req.path.startsWith('/stream/')) return next();
-  return res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+  return serveShell(req, res, shellDefaults(req));
 });
 app.listen(PORT, () => console.log(`[dramora] listening on http://localhost:${PORT} · payments: ${payments.providerStatus().mode}`));
